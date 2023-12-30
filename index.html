@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyBad - Test API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        button {
+            padding: 8px 12px;
+            margin-top: 8px;
+            cursor: pointer;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>MyBad - Test API</h1>
+
+    <button onclick="openLoginModal()">Se connecter</button>
+
+    <div id="loginModal" style="display: none;">
+        <h2>Connexion</h2>
+        <form id="loginForm">
+            <!-- ... champs pour le nom d'utilisateur et le mot de passe -->
+            <label for="loginPseudo">Pseudo:</label>
+            <input type="text" id="loginPseudo" name="loginPseudo" required>
+            <br>
+
+            <button type="button" onclick="login()">Se connecter</button>
+        </form>
+    </div>
+
+    <h2 class="admin">Get All Reservations</h2>
+<button class="admin" onclick="getAllReservations()">Get All Reservations</button>
+
+
+    <h2 class="admin">Delete Reservation</h2>
+<form id="deleteReservationForm" class="admin" onsubmit="deleteReservation(event)">
+    Reservation ID: <input type="text" name="reservation_id" required>
+    <button type="submit">Delete Reservation</button>
+    <p id="deleteMessage" style="color: rgb(50, 50, 50);"></p>
+</form>
+
+    <h1 class="user"> Réserver un terrain </h1>
+    
+    <!-- Formulaire de réservation -->
+    <form class="user" id="reservationForm">
+        <label for="startTime">Heure de début :</label>
+        <input type="datetime-local" id="startTime" name="start_time" required>
+        
+        <select id="status" name="status">
+            <option value="confirme">Confirmé</option>
+            <option value="a_confirmer">À confirmer</option>
+        </select>
+
+        <label for="startTime">Duration :</label>
+        <input type="number" id="duration" name="duration" required>
+
+        <label for="Pseudo"> Votre Pseudo: </label>
+        <input type="text" id="pseudo" name ="pseudo" required>
+
+        <!-- Liste déroulante pour les terrains -->
+        <label for="terrain">Choisissez un terrain :</label>
+        <select id="terrain" name="terrain_id" required>
+            <!-- Options seront générées dynamiquement côté client (JavaScript) -->
+        </select>
+
+        <button type="button" onclick="submitReservation()">Réserver</button>
+
+        <p id="errorMessage" style="color: red;"></p>
+    </form>
+
+
+    <!-- Ajoutez une nouvelle section pour "Voir ma réservation" -->
+<h2 class="user"> Voir ma réservation</h2>
+<form class="user" id="getMyReservationForm" onsubmit="getMyReservation(event)">
+    Pseudo : <input type="text" id="myReservationPseudo" name="pseudo" required>
+    <button type="submit">Voir ma réservation</button>
+</form>
+
+<!--  conteneur pour afficher la réservation de l'utilisateur   --> 
+<div id="myReservationContainer"></div>
+
+ <!-- conteneur pour afficher la liste des réservations -->
+<h3>Listes des réservations</h3>
+<div id="reservationsContainer"></div>
+
+    <script>
+        const apiUrl = 'http://localhost:3003'; 
+        function openLoginModal() {
+        document.getElementById('loginModal').style.display = 'block';
+    }
+
+    async function login() {
+    const pseudo = document.getElementById('loginPseudo').value;
+    let isAdmin; 
+
+
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                pseudo: pseudo
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+    // Connexion réussie
+    isAdmin = data.is_admin === 1; // Vérifiez si c'est un admin
+    // Appeler la fonction pour mettre à jour l'interface utilisateur avec le rôle
+    updateUIBasedOnRole(isAdmin);
+    location.reload(); // Actualisez la page pour refléter l'état connecté
+} else {
+    // Affichez un message d'erreur ou effectuez d'autres actions en cas d'échec de connexion
+    console.error('Échec de la connexion:', data.message);
+}
+
+    } catch (error) {
+        console.error('Erreur lors de la connexion:', error);
+    }
+}
+
+
+// fonction pour masquer ou afficher des éléments en fonction du rôle
+function updateUIBasedOnRole(isAdmin) {
+    const elementsToShowForAdmin = document.querySelectorAll('.admin');
+    const elementsToShowForUser = document.querySelectorAll('.user');
+
+    elementsToShowForAdmin.forEach(element => {
+        element.style.display = isAdmin ? 'block' : 'none';
+    });
+
+    elementsToShowForUser.forEach(element => {
+        element.style.display = isAdmin ? 'none' : 'block';
+    });
+}
+
+
+
+
+
+// Fonction pour récupérer la liste des terrains depuis le serveur
+        async function fetchTerrains() {
+            try {
+                const response = await fetch('/terrains');
+                const terrains = await response.json();
+                generateTerrainOptions(terrains);
+            } catch (error) {
+                console.error('Erreur lors de la récupération des terrains:', error);
+            }
+        }
+
+        function generateTerrainOptions(terrains) {
+            const terrainDropdown = document.getElementById('terrain');
+            
+            terrains.forEach(terrain => {
+                const option = document.createElement('option');
+                option.value = terrain.terrain_id;
+                option.textContent = terrain.terrain_name;
+                terrainDropdown.appendChild(option);
+            });
+        }
+
+        async function submitReservation() {
+    const startTime = document.getElementById('startTime').value; 
+    const selectedTerrainId = document.getElementById('terrain').value;
+    const Status = document.getElementById('status').value;
+    const pseudo = document.getElementById('pseudo').value;
+    const duration = document.getElementById('duration').value;
+
+    const reservationData = {
+        status_reservation: Status,
+        start_time: startTime,
+        duration: duration,
+        terrain_id: selectedTerrainId,
+        user_id: pseudo
+    };
+
+    try {
+        const response = await fetch('/reservations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(reservationData)
+        });
+
+        const data = await response.json();
+        console.log('Réponse du serveur:', data);
+
+        if (response.ok) {
+        alert('Réservation créée avec succès');
+        // Réinitialiser le formulaire
+        document.getElementById('reservationForm').reset();
+    } else {
+        console.error('Réponse du serveur non OK:', data);
+
+        // Afficher le message d'erreur du serveur sur la page
+        const errorMessageElement = document.getElementById('errorMessage');
+        errorMessageElement.textContent = data.message || 'Erreur lors de la réservation. Veuillez réessayer.';
+
+        // Réinitialiser le message d'erreur après un certain délai (par exemple, 5 secondes)
+        setTimeout(() => {
+            errorMessageElement.textContent = '';
+        }, 5000); // 5000 millisecondes (5 secondes)
+    }
+} catch (error) {
+    console.error('Erreur lors de la réservation:', error);
+
+    // Afficher le message d'erreur sur la page
+    const errorMessageElement = document.getElementById('errorMessage');
+    errorMessageElement.textContent = 'Erreur lors de la réservation. Veuillez réessayer.';
+
+    // Réinitialiser le message d'erreur après un certain délai (par exemple, 5 secondes)
+    setTimeout(() => {
+        errorMessageElement.textContent = '';
+    }, 5000); // 5000 millisecondes (5 secondes)
+}
+}
+
+
+        // Générer les options au chargement de la page
+        fetchTerrains();
+
+        function getAllReservations() {
+    fetch(`${apiUrl}/reservations`)
+        .then(response => response.json())
+        .then(data => {
+            console.log(data);
+            displayReservations(data);
+
+            // Réinitialiser le message après un certain délai (par exemple, 5 secondes)
+            const errorMessageElement = document.getElementById('errorMessage');
+            setTimeout(() => {
+                errorMessageElement.textContent = '';
+            }, 5000); // 5000 millisecondes (5 secondes)
+        })
+        .catch(error => console.error(error));
+}
+
+
+        // ...
+
+// ...
+
+function deleteReservation(event) {
+    event.preventDefault();
+    const form = document.getElementById('deleteReservationForm');
+    const formData = new FormData(form);
+
+    fetch(`${apiUrl}/reservations/${formData.get('reservation_id')}`, {
+        method: 'DELETE',
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log(data);
+        getAllReservations(); // Actualiser la liste des réservations après en avoir supprimé une
+        alert(data.message); // Afficher le message d'erreur sur la page
+    })
+    .catch(error => console.error(error));
+}
+
+function displayMyReservation(reservations) {
+    const myReservationContainer = document.getElementById('myReservationContainer');
+    myReservationContainer.innerHTML = '<h3>Ma réservation</h3>';
+
+    if (reservations && reservations.length > 0) {
+        const reservationDetails = reservations.map(reservation => {
+            return Object.entries(reservation)
+                .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
+                .join('<br>');
+        }).join('<br><br>');
+        
+        myReservationContainer.innerHTML += `<p>${reservationDetails}</p>`;
+    } else {
+        myReservationContainer.innerHTML += '<p>Aucune réservation trouvée pour ce pseudo.</p>';
+    }
+}
+
+// ...
+async function getMyReservation(event) {
+    event.preventDefault();
+    const pseudo = document.getElementById('myReservationPseudo').value;
+
+    try {
+        const response = await fetch(`${apiUrl}/reservations/user/${pseudo}`);
+        const data = await response.json();
+
+        console.log(data); // Affiche les données brutes dans la console du navigateur
+
+        // Si vous voulez afficher les données dans votre page HTML, vous devez les traiter
+        // et les ajouter à votre page en conséquence.
+        displayMyReservation(data);
+    } catch (error) {
+        console.error('Erreur lors de la récupération de la réservation de l\'utilisateur:', error);
+    }
+}
+
+
+
+
+
+function displayReservations(reservations, isSingleReservation = false) {
+    const containerId = isSingleReservation ? 'myReservationContainer' : 'reservationsContainer';
+    const container = document.getElementById(containerId);
+
+    // Efface le contenu existant du conteneur
+    container.innerHTML = '';
+
+    if (isSingleReservation) {
+        container.innerHTML = '<h3>Ma réservation</h3>';
+    } else {
+        container.innerHTML = '<h2>All Reservations</h2>';
+    }
+
+    if (reservations.length === 0) {
+        container.innerHTML += '<p>No reservations available.</p>';
+    } else {
+        container.innerHTML += isSingleReservation ? '<p>' : '<ul>';
+
+        reservations.forEach(reservation => {
+            const reservationDetails = Object.entries(reservation)
+                .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
+                .join('<br>');
+            container.innerHTML += isSingleReservation ? reservationDetails : `<li>${reservationDetails}</li>`;
+        });
+
+        container.innerHTML += isSingleReservation ? '</p>' : '</ul>';
+    }
+
+    document.body.appendChild(container);
+}
+
+    </script>
+
+</body>
+</html>
